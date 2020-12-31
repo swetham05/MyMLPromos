@@ -1,0 +1,220 @@
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+class Node {
+	int index;
+	double cost;
+
+	public Node(int index, double localCost) {
+		this.index = index;
+		this.cost = localCost;
+	}
+}
+
+public class TSP_BNB {
+	double lowerBound = 0;
+	double upperBound = Double.MAX_VALUE;
+	int sourceNode = 0;
+	double[][] adjMatrix;
+	List<Integer> shortestPath = new ArrayList<>();
+	static Long startTime = 0L;
+	boolean timeLimitExceeded =false;
+	int counter =0 ;
+
+	void branchAndBoundBnB() {
+		lowerBound = reduceMatrix(adjMatrix);
+		findShortestPath();
+		shortestPath.add(sourceNode);
+		System.out.println("Lower bound : " + lowerBound);
+		System.out.println("The shortest Path is " + shortestPath);
+		System.out.println("Upper bound : " + upperBound);
+	}
+
+	private Double reduceMatrix(double[][] adjMatrix2) {
+		double reductionCost = 0;
+		for (int i = 0; i < adjMatrix2.length; i++) {
+			reductionCost = reductionCost + reduceRow(adjMatrix2, i);
+		}
+
+		for (int i = 0; i < adjMatrix2.length; i++) {
+			reductionCost = reductionCost + reduceColumn(adjMatrix2, i);
+		}
+		return reductionCost;
+
+	}
+
+	private double reduceColumn(double[][] adjMatrix2, int columnNumber) {
+		double reductionCost = getMinValForCol(adjMatrix2, columnNumber);
+		for (int i = 0; i < adjMatrix2.length; i++) {
+			if(i == columnNumber) {
+				continue;
+			}
+			adjMatrix2[i][columnNumber] = adjMatrix2[i][columnNumber] - reductionCost;
+		}
+		return reductionCost;
+	}
+
+	private double reduceRow(double[][] adjMatrix2, int row) {
+		double reductionCost = getMinValForRow(adjMatrix2[row], row);
+		for (int i = 0; i < adjMatrix2.length; i++) {
+			if (i==row) {
+				continue;
+			}
+			adjMatrix2[row][i] = adjMatrix2[row][i] - reductionCost;
+		}
+		return reductionCost;
+	}
+
+	private double getMinValForRow(double[] adjMatrix2, int row) {
+		double minElement = Double.MAX_VALUE;
+		for (int i = 0; i < adjMatrix2.length; i++) {
+			if(row == i) {
+				continue;
+			}
+			if (adjMatrix2[i] < minElement) {
+				minElement = adjMatrix2[i];
+			}
+		}
+		return minElement = minElement == Double.MAX_VALUE ? 0 : minElement;
+	}
+
+	private double getMinValForCol(double[][] adjMatrix2, int column) {
+		double minElement = Double.MAX_VALUE;
+		for (int i = 0; i < adjMatrix2.length; i++) {
+			if(column == i) {
+				continue;
+			}
+			if (adjMatrix2[i][column] < minElement) {
+				minElement = adjMatrix2[i][column];
+			}
+		}
+		return minElement = minElement == Double.MAX_VALUE ? 0 : minElement;
+	}
+
+	private void findShortestPath() {
+		List<Node> traversalOrder = new ArrayList<Node>();
+		findInitialTraversalOrder(traversalOrder);
+		traverseNodes(traversalOrder);
+	}
+
+	private void traverseNodes(List<Node> traversalOrder) {
+		for (Node node : traversalOrder) {
+
+			List<Integer> path = new ArrayList<>();
+			path.add(sourceNode);
+			path.add(node.index);
+			if(node.cost > upperBound) {
+				continue;
+			}
+			double[][] tempMatrix = Arrays.stream(adjMatrix).map(double[]::clone).toArray(double[][]::new);
+			for (int j = 0; j < adjMatrix.length; j++) {
+				tempMatrix[sourceNode][j] = Double.MAX_VALUE;
+				tempMatrix[j][node.index] = Double.MAX_VALUE;
+			}
+			int stackLevel = 1;
+			traverseChildNodesAndFindShortestPath(node.index, path, node.cost, tempMatrix, stackLevel);
+			if(timeLimitExceeded) {
+				return;
+			}
+		}
+	}
+
+	private void traverseChildNodesAndFindShortestPath(int index, List<Integer> path, double localCost2, double[][] tempMatrix, int stackLevel) {
+		if(timeLimitExceeded || System.currentTimeMillis() - startTime > TimeUnit.MINUTES.toMillis(15)) {
+			timeLimitExceeded = true;
+			return;
+		}
+		for (int i = 0; i < adjMatrix.length; i++) {
+			if (path.contains(i)) {
+				continue;
+			}
+			double[][] localMatrix = Arrays.stream(tempMatrix).map(double[]::clone).toArray(double[][]::new);
+			for (int j = 0; j < adjMatrix.length; j++) {
+				localMatrix[index][j] = Double.MAX_VALUE;
+				localMatrix[j][i] = Double.MAX_VALUE;
+			}
+			Double reductionCost = reduceMatrix(tempMatrix);
+			double localCost = localCost2 + adjMatrix[index][i] + reductionCost;
+			if (localCost > upperBound) {
+				continue;
+			}
+
+			ArrayList<Integer> newPath = new ArrayList<>(path);
+			newPath.add(i);
+			if (newPath.size() == adjMatrix.length) {
+				upperBound = localCost;
+				shortestPath = newPath;
+				counter++;
+				continue;
+			}
+			traverseChildNodesAndFindShortestPath(i, newPath, localCost, localMatrix, ++stackLevel);
+		}
+	}
+
+	private void findInitialTraversalOrder(List<Node> traversalCost) {
+		int N = adjMatrix.length;
+		for (int i = 0; i < N; i++) {
+			if (i != sourceNode) {
+				double[][] tempMatrix = Arrays.stream(adjMatrix).map(double[]::clone).toArray(double[][]::new);
+
+				for (int j = 0; j < N; j++) {
+					tempMatrix[sourceNode][j] = Double.MAX_VALUE;
+					tempMatrix[j][i] = Double.MAX_VALUE;
+				}
+				tempMatrix[i][sourceNode] = Double.MAX_VALUE;
+				double reductionCost = reduceMatrix(tempMatrix);
+				double localCost = reductionCost + lowerBound + adjMatrix[sourceNode][i];
+				Node node = new Node(i, localCost);
+				traversalCost.add(node);
+			}
+		}
+
+		Collections.sort(traversalCost, new Comparator<Node>() {
+			@Override
+			public int compare(Node o1, Node o2) {
+				if (o1.cost < o2.cost)
+					return -1;
+				if (o1.cost > o2.cost)
+					return 1;
+				return 0;
+			}
+		});
+	}
+
+	public static void main(String[] args) throws IOException {
+		InputParser inputParser = new InputParser();
+
+		List<String> benchmarkFiles = inputParser.getBenchmarkFileNames();
+
+		FileWriter csvWriter = new FileWriter("../results/results_BNB.csv");
+		csvWriter.append("10488230,16205495,12044831\n");
+		csvWriter.append("SLS\n");
+		csvWriter.append("TSP\n");
+		for(String benchmarkFile: benchmarkFiles) {
+			System.out.println("benchmark file :::" + benchmarkFile);
+			double[][] distanceMatrix = inputParser.generateInput(benchmarkFile);
+			TSP_BNB tsp = new TSP_BNB();
+			tsp.counter = 0;
+			tsp.shortestPath.clear();
+			startTime  = System.currentTimeMillis();
+			tsp.adjMatrix = distanceMatrix;
+			tsp.branchAndBoundBnB();
+			if(tsp.timeLimitExceeded) {
+				System.out.println("Timed out!");
+			}
+			DecimalFormat df = new DecimalFormat("#.#####");
+			csvWriter.append(benchmarkFile).append(",").append(String.valueOf(df.format(tsp.upperBound))).append(",").append(String.valueOf(System.currentTimeMillis() - startTime)).append(",").append(String.valueOf(tsp.counter)).append("\n");
+		}
+		csvWriter.flush();
+		csvWriter.close();
+	}
+}
+
+
