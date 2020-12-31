@@ -1,0 +1,148 @@
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.List;
+
+public class TSP_SLS {
+
+    public static void main(String[] args) throws IOException {
+        InputParser inputParser = new InputParser();
+
+        List<String> benchmarkFiles = inputParser.getBenchmarkFileNames();
+
+        FileWriter csvWriter = new FileWriter("../results/results_SLS.csv");
+        csvWriter.append("10488230,16205495,12044831\n");
+        csvWriter.append("SLS\n");
+        csvWriter.append("TSP\n");
+        DecimalFormat df = new DecimalFormat("#.#####");
+        for(String benchmarkFile: benchmarkFiles) {
+            double[][] distanceMatrix = inputParser.generateInput(benchmarkFile);
+            int sourceNode = 0;
+
+            SLS sls = new SLS(distanceMatrix, sourceNode);
+            List<Integer> bestPath = sls.findBestPathWithSLS();
+            System.out.printf("Best path found for [%s]: " + bestPath + "\n", benchmarkFile);
+            csvWriter.append(benchmarkFile).append(",").append(String.valueOf(df.format(sls.distance(bestPath)))).append(",")
+                    .append(String.valueOf(System.currentTimeMillis() - sls.getStartTime())).append(",")
+                    .append(String.valueOf(sls.getSimulationCount())).append("\n");
+        }
+        csvWriter.flush();
+        csvWriter.close();
+    }
+}
+
+class SLS {
+    private final double[][] distanceMatrix;
+    private final int sourceNode;
+    private long startTime;
+    private int simulationCount = 0;
+
+    public SLS (double[][] distanceMatrix, int sourceNode){
+        this.distanceMatrix = distanceMatrix;
+        this.sourceNode = sourceNode;
+    }
+
+    public int getSimulationCount(){
+        return simulationCount;
+    }
+
+    public long getStartTime(){
+        return startTime;
+    }
+
+    public List<Integer> findBestPathWithSLS(){
+        List<Integer> bestPath = getRandomPath(distanceMatrix.length);
+
+        boolean endSearch = false;
+
+        startTime = System.currentTimeMillis();
+        while(!endSearch){
+
+            if((System.currentTimeMillis() - startTime)/60000 >= 15){
+                System.out.println("Benchmark time limit of 15 mins exceeded. Here is the best path found:");
+                break;
+            }
+
+            simulationCount++;
+            double currDistance = distance(bestPath);
+            bestPath = pickNextBest(currDistance, bestPath);
+
+            if(currDistance == distance(bestPath)){
+                endSearch = true;
+            }
+        }
+
+        return bestPath;
+    }
+
+    private List<Integer> pickNextBest(double currDistance, List<Integer> bestPath) {
+        for(int i =1; i< bestPath.size()-2; i++){
+            for(int j = i+2; j<bestPath.size(); j++){
+
+                if(bestPath.get(i - 1).equals(bestPath.get(j))) continue;
+
+                List<Integer> nextPath = swapEdges(bestPath, i, j);
+
+                if(distance(nextPath)< currDistance){
+                    return nextPath;
+                }
+            }
+        }
+        return bestPath;
+    }
+
+
+    private List<Integer> swapEdges(List<Integer> bestPath, int i, int j) {
+        List<Integer> newPath = new ArrayList<>();
+
+        int newPathIndex = 0;
+
+        for(; newPathIndex<=i-1; newPathIndex++){
+            newPath.add(newPathIndex, bestPath.get(newPathIndex));
+        }
+
+        for(int swapIndex= j-1; swapIndex>=i; swapIndex-- ){
+            newPath.add(newPathIndex, bestPath.get(swapIndex));
+            newPathIndex++;
+        }
+
+        for(; newPathIndex<= bestPath.size()-1; newPathIndex++){
+            newPath.add(newPathIndex, bestPath.get(newPathIndex));
+        }
+
+        return newPath;
+    }
+
+    public double distance(List<Integer> bestPath) {
+        double pathCost =0.0;
+
+        for(int i =1; i< bestPath.size(); i++){
+            pathCost += distanceMatrix[bestPath.get(i-1)][bestPath.get(i)];
+        }
+        return pathCost;
+    }
+
+    private List<Integer> getRandomPath(int size) {
+        List<Integer> randomPath = new ArrayList<>();
+        boolean endGeneration = false;
+        int pathSizeCounter = 1;
+
+        randomPath.add(sourceNode);
+
+        while(!endGeneration){
+            int randomNumber = (int)(Math.random() * (((size - 1) - 1) + 1)) + 1;
+            if(!randomPath.contains(randomNumber)){
+                randomPath.add(randomNumber);
+                pathSizeCounter++;
+            }
+
+            if(pathSizeCounter == size){
+                endGeneration = true;
+            }
+        }
+
+        randomPath.add(sourceNode);
+        return randomPath;
+    }
+}
